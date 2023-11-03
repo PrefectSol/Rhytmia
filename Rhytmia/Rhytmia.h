@@ -9,11 +9,14 @@
 #include <iostream>
 #include <filesystem>
 
+#include <Windows.h>
+
 #include <SDL.h>
 #include <SDL_ttf.h>
 #include <SDL_image.h>
 
 #include "OsuClient.h"
+#include "WebWrapper.h"
 
 #undef main
 
@@ -33,6 +36,7 @@ public:
 private:
     enum AppCode
     {
+        webWrapperError = -5,
         imageError = -4,
         osuClientError = -3,
         ttfError = -2,
@@ -53,6 +57,8 @@ private:
     AppCode m_appCode;
 
     OsuClient *m_osuClient;
+
+    WebWrapper *m_webWrapper;
 
     SDL_Window *m_window;
 
@@ -90,7 +96,7 @@ private:
 
     AppCode getPlugins(std::vector<std::string> *toInstall, std::vector<std::string> *installed);
 
-    AppCode getAllPlugins(std::vector<std::string> *all, std::string path);
+    AppCode getAllPlugins(std::vector<std::string> *all);
 
     SDL_Color getColor(const char *type);
 

@@ -3,6 +3,7 @@
 Rhytmia::Rhytmia()
     : m_appCode(AppCode()),
     m_osuClient(NULL),
+    m_webWrapper(NULL),
     m_window(NULL),
     m_renderer(NULL),
     m_font(NULL),
@@ -16,12 +17,19 @@ Rhytmia::Rhytmia()
         return;
     }
 
-    //m_osuClient = OsuClientOpen(m_config);
-    //if (m_osuClient == NULL)
-    //{
-    //    m_appCode = AppCode::osuClientError;
-    //    return;
-    //}
+    m_osuClient = OsuClientOpen(m_config);
+    if (m_osuClient == NULL)
+    {
+        m_appCode = AppCode::osuClientError;
+        return;
+    }
+
+    m_webWrapper = WebWrapperOpen();
+    if (m_webWrapper == NULL)
+    {
+        m_appCode = AppCode::webWrapperError;
+        return;
+    }
 
     m_appCode = initButtons();
     if (m_appCode != AppCode::success)
@@ -63,6 +71,7 @@ Rhytmia::Rhytmia()
 
 Rhytmia::~Rhytmia()
 {
+    WebWrapperClose(m_webWrapper);
     OsuClientClose(m_osuClient);
 
     TTF_CloseFont(m_font);
@@ -100,9 +109,35 @@ void Rhytmia::run()
     int selectedButtonIndex = 0;
 
     bool quit = false;
+    bool isShow = true;
+    bool prevKeyPressed = false;
+
     SDL_Event event;
     while (!quit)
     {
+        if (GetAsyncKeyState(VK_MENU) & 0x8000 && GetAsyncKeyState(VK_F11) & 0x8000) 
+        {
+            if (!prevKeyPressed) 
+            {
+                if (isShow) 
+                {
+                    SDL_HideWindow(m_window);
+                }
+                else 
+                {
+                    SDL_ShowWindow(m_window);
+                }
+
+                isShow = !isShow;
+            }
+
+            prevKeyPressed = true;
+        }
+        else 
+        {
+            prevKeyPressed = false;
+        }
+
         while (SDL_PollEvent(&event))
         {
             if (event.type == SDL_KEYDOWN)
@@ -152,6 +187,10 @@ int Rhytmia::exitCode()
     {
         switch (m_appCode)
         {
+        case AppCode::webWrapperError:
+            SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "WebWrapper_ERROR", WebWrapper_GetError().c_str(), NULL);
+            break;
+
         case AppCode::osuClientError:
             SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "OsuClient_ERROR", OsuClient_GetError().c_str(), NULL);
             break;
@@ -213,6 +252,10 @@ void Rhytmia::getWindowPos(int *x, int *y)
 
 Rhytmia::AppCode Rhytmia::aboutButtonAction(SDL_Event &event, int *selectedIndex, int buttonIndexes, int x, int y)
 {
+    int contactWidth, contactHeight;
+    TTF_SizeText(m_smallFont, "Discord: prefectsol", &contactWidth, &contactHeight);
+    m_aboutPageW = contactWidth + 2 * m_marginW;
+
     SDL_Window *childWindow = SDL_CreateWindow((m_config["APP"]["app_name"] + "-about").c_str(),
                                                 x, y, m_aboutPageW, m_aboutPageH,
                                                 SDL_WINDOW_SHOWN | SDL_WINDOW_ALLOW_HIGHDPI |
@@ -259,8 +302,6 @@ Rhytmia::AppCode Rhytmia::aboutButtonAction(SDL_Event &event, int *selectedIndex
 
     SDL_Surface *contactSurface = TTF_RenderText_Solid(m_smallFont, "Discord: prefectsol", m_colors.text);
     SDL_Texture *contactTexture = SDL_CreateTextureFromSurface(childRenderer, contactSurface);
-    int contactWidth, contactHeight;
-    TTF_SizeText(m_smallFont, "Discord: prefectsol", &contactWidth, &contactHeight);
     const SDL_Rect contactRect = { m_marginW, (versionPosH + previewHeight + 100) / 2, contactSurface->w, contactSurface->h };
 
     SDL_RenderClear(childRenderer);
@@ -273,7 +314,7 @@ Rhytmia::AppCode Rhytmia::aboutButtonAction(SDL_Event &event, int *selectedIndex
     SDL_RenderPresent(childRenderer);
 
     while (SDL_WaitEvent(&event))
-    {
+    {    
         if (event.type == SDL_KEYDOWN && (event.key.keysym.sym == SDLK_UP || event.key.keysym.sym == SDLK_DOWN))
         {
             if (event.key.keysym.sym == SDLK_UP && *selectedIndex > 0)
@@ -454,7 +495,7 @@ Rhytmia::AppCode Rhytmia::getPlugins(std::vector<std::string> *toInstall, std::v
         }
     }
 
-    m_appCode = getAllPlugins(toInstall, pluginsPath + "all.txt");
+    m_appCode = getAllPlugins(toInstall);
     if (m_appCode != AppCode::success)
     {
         return m_appCode;
@@ -468,21 +509,25 @@ Rhytmia::AppCode Rhytmia::getPlugins(std::vector<std::string> *toInstall, std::v
     return AppCode::success;
 }
 
-Rhytmia::AppCode Rhytmia::getAllPlugins(std::vector<std::string> *all, std::string path)
+Rhytmia::AppCode Rhytmia::getAllPlugins(std::vector<std::string> *all)
 {
-    std::ifstream file(path);
-    if (!file.is_open())
+    const std::string url = m_config["PLUGINS"]["all_plugins_url"];
+    std::string response;
+
+    const WebWrapper::ResultCode isGetResp = m_webWrapper->getResponse(url, &response);
+    if (isGetResp != WebWrapper::ResultCode::success)
     {
-        return AppCode::openPluginsFileError;
+        return AppCode::webWrapperError;
     }
 
-    std::string line;
-    while (std::getline(file, line))
-    {
-        all->push_back(line);
-    }
+    std::vector<std::string> words;
+    std::stringstream ss(response);
+    std::string word;
 
-    file.close();
+    while (ss >> word) 
+    {
+        all->push_back(word);
+    }
 
     return AppCode::success;
 }

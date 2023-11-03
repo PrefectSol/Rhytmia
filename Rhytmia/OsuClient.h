@@ -40,8 +40,6 @@ public:
 
     explicit OsuClient(const cfg &config);
 
-    ResultCode initialize();
-
     ResultCode getStatus();
 
 private:
@@ -62,6 +60,8 @@ private:
     std::string m_appDirectory;
 
     std::string m_beatmapDirectory;
+
+    ResultCode initialize();
 
     ResultCode initPid();
 
