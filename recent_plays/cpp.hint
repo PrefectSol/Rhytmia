@@ -1,0 +1,2 @@
+#define RECENTPLAYS_API __declspec(dllexport)
+#define RECENTPLAYS_API __declspec(dllimport)
