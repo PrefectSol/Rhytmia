@@ -74,13 +74,17 @@ private:
 
     std::vector<std::string> m_menuButtons;
 
+    std::vector<std::string> m_toInstallPlugins, m_installedPlugins;
+
     cfg m_config;
 
     int m_marginH, m_marginW;
 
     int m_aboutPageW, m_aboutPageH;
 
-    void getWindowSizes(int *width, int *height);
+    int m_installPluginsPageW, m_installPluginsPageH;
+
+    void getWindowSizes(int *width, int *height, const std::vector<std::string> &buttons);
 
     void getWindowPos(int *x, int *y);
 
@@ -89,6 +93,8 @@ private:
     AppCode initialize(int *windowWidth, int *windowHeight, int *x, int *y);
 
     AppCode aboutButtonAction(SDL_Event &event, int *selectedIndex, int buttonIndexes, int x, int y);
+
+    AppCode installPluginsButtonAction(SDL_Event &event, int *selectedIndex, int buttonIndexes, int x, int y);
 
     AppCode parseConfig();
 

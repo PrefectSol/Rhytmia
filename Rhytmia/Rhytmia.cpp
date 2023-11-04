@@ -9,7 +9,8 @@ Rhytmia::Rhytmia()
     m_font(NULL),
     m_iconSurface(NULL),
     m_marginH(5), m_marginW(5),
-    m_aboutPageH(200), m_aboutPageW(150)
+    m_aboutPageH(200), m_aboutPageW(150),
+    m_installPluginsPageH(35), m_installPluginsPageW(100)
 {
     m_appCode = parseConfig();
     if (m_appCode != AppCode::success)
@@ -105,6 +106,7 @@ void Rhytmia::run()
     const int buttonIndexes = buttonCount - 1;
     const int exitButton = buttonIndexes;
     const int aboutButton = buttonIndexes - 1;
+    const int installPluginsButton = int(m_toInstallPlugins.size() != 0) - 1;
 
     int selectedButtonIndex = 0;
 
@@ -170,6 +172,14 @@ void Rhytmia::run()
                             return;
                         }
                     }
+                    else if (selectedButtonIndex == installPluginsButton)
+                    {
+                        m_appCode = installPluginsButtonAction(event, &selectedButtonIndex, buttonIndexes, x + windowWidth + m_marginW, y);
+                        if (m_appCode != AppCode::success)
+                        {
+                            return;
+                        }
+                    }
                     break;
                 default:
                     break;
@@ -216,12 +226,12 @@ int Rhytmia::exitCode()
 	return m_appCode;
 }
 
-void Rhytmia::getWindowSizes(int *width, int *height)
+void Rhytmia::getWindowSizes(int *width, int *height, const std::vector<std::string> &buttons)
 {
     int totalHeight = 0;
     int maxWidth = 0;
 
-    for (const std::string &name : m_menuButtons)
+    for (const std::string &name : buttons)
     {
         int textWidth, textHeight;
         TTF_SizeText(m_font, name.c_str(), &textWidth, &textHeight);
@@ -230,8 +240,8 @@ void Rhytmia::getWindowSizes(int *width, int *height)
         maxWidth = max(maxWidth, textWidth);
     }
 
-    *width = maxWidth + m_marginW;
-    *height = totalHeight + m_menuButtons.size() * m_marginH;
+    *width = maxWidth + 2 * m_marginW;
+    *height = totalHeight + buttons.size() * m_marginH;
 }
 
 void Rhytmia::getWindowPos(int *x, int *y)
@@ -351,6 +361,55 @@ Rhytmia::AppCode Rhytmia::aboutButtonAction(SDL_Event &event, int *selectedIndex
     return AppCode::success;
 }
 
+Rhytmia::AppCode Rhytmia::installPluginsButtonAction(SDL_Event &event, int *selectedIndex, int buttonIndexes, int x, int y)
+{
+    SDL_Window *childWindow = SDL_CreateWindow((m_config["APP"]["app_name"] + "-install-plugins").c_str(),
+                                                x, y, m_installPluginsPageW, m_installPluginsPageH,
+                                                SDL_WINDOW_SHOWN | SDL_WINDOW_ALLOW_HIGHDPI |
+                                                SDL_WINDOW_BORDERLESS | SDL_WINDOW_ALWAYS_ON_TOP);
+    if (childWindow == NULL)
+    {
+        return AppCode::sdlError;
+    }
+
+    SDL_SetWindowIcon(childWindow, m_iconSurface);
+    SDL_SetWindowOpacity(childWindow, std::stof(m_config["APP"]["window_opacity"]));
+
+    SDL_Renderer *childRenderer = SDL_CreateRenderer(childWindow, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+    if (m_renderer == NULL)
+    {
+        return AppCode::sdlError;
+    }
+
+    SDL_SetRenderDrawColor(childRenderer, m_colors.background.r, m_colors.background.g, m_colors.background.b, m_colors.background.a);
+
+    SDL_RenderClear(childRenderer);
+    SDL_RenderPresent(childRenderer);
+
+    while (SDL_WaitEvent(&event))
+    {
+        if (event.type == SDL_KEYDOWN && (event.key.keysym.sym == SDLK_UP || event.key.keysym.sym == SDLK_DOWN))
+        {
+            if (event.key.keysym.sym == SDLK_UP && *selectedIndex > 0)
+            {
+                (*selectedIndex)--;
+            }
+            else if (event.key.keysym.sym == SDLK_DOWN && *selectedIndex < buttonIndexes)
+            {
+                (*selectedIndex)++;
+            }
+
+            SDL_HideWindow(childWindow);
+            break;
+        }
+    }
+
+    SDL_DestroyRenderer(childRenderer);
+    SDL_DestroyWindow(childWindow);
+
+    return AppCode::success;
+}
+
 void Rhytmia::renderWindow(int buttonCount, int selectedButtonIndex, int windowWidth, int windowHeight)
 {
     SDL_RenderClear(m_renderer);
@@ -366,9 +425,9 @@ void Rhytmia::renderWindow(int buttonCount, int selectedButtonIndex, int windowW
         SDL_Texture *textTexture = SDL_CreateTextureFromSurface(m_renderer, textSurface);
 
         SDL_Rect textRect{};
-        textRect.x = 0;
+        textRect.x = m_marginW;
         textRect.y = i * windowHeight / buttonCount + m_marginH;
-        textRect.w = windowWidth;
+        textRect.w = windowWidth - m_marginW;
         textRect.h = textSurface->h;
 
         SDL_RenderFillRect(m_renderer, &textRect);
@@ -388,7 +447,8 @@ void Rhytmia::renderWindow(int buttonCount, int selectedButtonIndex, int windowW
 
 Rhytmia::AppCode Rhytmia::initialize(int *windowWidth, int *windowHeight, int *x, int *y)
 {
-    getWindowSizes(windowWidth, windowHeight);
+    getWindowSizes(windowWidth, windowHeight, m_menuButtons);
+    getWindowSizes(&m_installPluginsPageW, &m_installPluginsPageH, m_toInstallPlugins);
     getWindowPos(x, y);
 
     m_window = SDL_CreateWindow(m_config["APP"]["app_name"].c_str(), *x, *y, *windowWidth, *windowHeight,
@@ -459,20 +519,21 @@ Rhytmia::AppCode Rhytmia::parseConfig()
 
 Rhytmia::AppCode Rhytmia::initButtons()
 {
-    std::vector<std::string> toInstall, installed;
-    m_appCode = getPlugins(&toInstall, &installed);
+    m_appCode = getPlugins(&m_toInstallPlugins, &m_installedPlugins);
 
     if (m_appCode != AppCode::success)
     {
         return m_appCode;
     }
 
-    if (toInstall.size() > 0)
+    if (m_toInstallPlugins.size() > 0)
     {
         m_menuButtons.push_back("install plugins");
+
+       
     }
 
-    for (const std::string &entry : installed)
+    for (const std::string &entry : m_installedPlugins)
     {
         m_menuButtons.push_back(entry);
     }
