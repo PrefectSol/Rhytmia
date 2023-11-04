@@ -42,6 +42,8 @@ public:
 
     ResultCode getStatus();
 
+    bool isClosed();
+
 private:
     const char *m_cfgExtension;
 

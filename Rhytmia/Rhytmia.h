@@ -90,11 +90,13 @@ private:
 
     void renderWindow(int buttonCount, int selectedButtonIndex, int windowWidth, int windowHeight);
 
+    void loadPlugin(const size_t &index);
+
     AppCode initialize(int *windowWidth, int *windowHeight, int *x, int *y);
 
     AppCode aboutButtonAction(SDL_Event &event, int *selectedIndex, int buttonIndexes, int x, int y);
 
-    AppCode installPluginsButtonAction(SDL_Event &event, int *selectedIndex, int buttonIndexes, int x, int y);
+    AppCode installPluginsButtonAction(SDL_Event &event, int x, int y);
 
     AppCode parseConfig();
 

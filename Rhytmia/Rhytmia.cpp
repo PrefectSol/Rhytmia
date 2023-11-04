@@ -10,7 +10,7 @@ Rhytmia::Rhytmia()
     m_iconSurface(NULL),
     m_marginH(5), m_marginW(5),
     m_aboutPageH(200), m_aboutPageW(150),
-    m_installPluginsPageH(35), m_installPluginsPageW(100)
+    m_installPluginsPageH(0), m_installPluginsPageW(0)
 {
     m_appCode = parseConfig();
     if (m_appCode != AppCode::success)
@@ -115,7 +115,7 @@ void Rhytmia::run()
     bool prevKeyPressed = false;
 
     SDL_Event event;
-    while (!quit)
+    while (!quit && !m_osuClient->isClosed())
     {
         if (GetAsyncKeyState(VK_MENU) & 0x8000 && GetAsyncKeyState(VK_F11) & 0x8000) 
         {
@@ -128,6 +128,7 @@ void Rhytmia::run()
                 else 
                 {
                     SDL_ShowWindow(m_window);
+                    SDL_RaiseWindow(m_window);
                 }
 
                 isShow = !isShow;
@@ -139,6 +140,13 @@ void Rhytmia::run()
         {
             prevKeyPressed = false;
         }
+
+        if (!isShow)
+        {
+            continue;
+        }
+
+        renderWindow(buttonCount, selectedButtonIndex, windowWidth, windowHeight);
 
         while (SDL_PollEvent(&event))
         {
@@ -174,20 +182,16 @@ void Rhytmia::run()
                     }
                     else if (selectedButtonIndex == installPluginsButton)
                     {
-                        m_appCode = installPluginsButtonAction(event, &selectedButtonIndex, buttonIndexes, x + windowWidth + m_marginW, y);
+                        m_appCode = installPluginsButtonAction(event, x + windowWidth + m_marginW, y);
                         if (m_appCode != AppCode::success)
                         {
                             return;
                         }
                     }
                     break;
-                default:
-                    break;
                 }
             }
         }
-
-        renderWindow(buttonCount, selectedButtonIndex, windowWidth, windowHeight);
     }
 }
 
@@ -323,9 +327,11 @@ Rhytmia::AppCode Rhytmia::aboutButtonAction(SDL_Event &event, int *selectedIndex
 
     SDL_RenderPresent(childRenderer);
 
-    while (SDL_WaitEvent(&event))
+    while (SDL_WaitEvent(&event) && !m_osuClient->isClosed())
     {    
-        if (event.type == SDL_KEYDOWN && (event.key.keysym.sym == SDLK_UP || event.key.keysym.sym == SDLK_DOWN))
+        if (event.type == SDL_KEYDOWN && (event.key.keysym.sym == SDLK_UP ||
+                                        event.key.keysym.sym == SDLK_DOWN ||
+                                        event.key.keysym.sym == SDLK_LEFT))
         {
             if (event.key.keysym.sym == SDLK_UP && *selectedIndex > 0)
             {
@@ -361,7 +367,7 @@ Rhytmia::AppCode Rhytmia::aboutButtonAction(SDL_Event &event, int *selectedIndex
     return AppCode::success;
 }
 
-Rhytmia::AppCode Rhytmia::installPluginsButtonAction(SDL_Event &event, int *selectedIndex, int buttonIndexes, int x, int y)
+Rhytmia::AppCode Rhytmia::installPluginsButtonAction(SDL_Event &event, int x, int y)
 {
     SDL_Window *childWindow = SDL_CreateWindow((m_config["APP"]["app_name"] + "-install-plugins").c_str(),
                                                 x, y, m_installPluginsPageW, m_installPluginsPageH,
@@ -382,25 +388,75 @@ Rhytmia::AppCode Rhytmia::installPluginsButtonAction(SDL_Event &event, int *sele
     }
 
     SDL_SetRenderDrawColor(childRenderer, m_colors.background.r, m_colors.background.g, m_colors.background.b, m_colors.background.a);
+    
+    const int pluginsCount = m_toInstallPlugins.size();
+    const int pluginsIndexes = pluginsCount - 1;
+    int selectedButtonIndex = 0;
+    bool quit = false;
 
-    SDL_RenderClear(childRenderer);
-    SDL_RenderPresent(childRenderer);
-
-    while (SDL_WaitEvent(&event))
+    while (!quit && !m_osuClient->isClosed())
     {
-        if (event.type == SDL_KEYDOWN && (event.key.keysym.sym == SDLK_UP || event.key.keysym.sym == SDLK_DOWN))
+        SDL_RenderClear(childRenderer);
+
+        for (size_t i = 0; i < pluginsCount; i++)
         {
-            if (event.key.keysym.sym == SDLK_UP && *selectedIndex > 0)
+            if (i == selectedButtonIndex)
             {
-                (*selectedIndex)--;
-            }
-            else if (event.key.keysym.sym == SDLK_DOWN && *selectedIndex < buttonIndexes)
-            {
-                (*selectedIndex)++;
+                SDL_SetRenderDrawColor(childRenderer, m_colors.sText.r, m_colors.sText.g, m_colors.sText.b, m_colors.sText.a);
             }
 
-            SDL_HideWindow(childWindow);
-            break;
+            SDL_Surface *textSurface = TTF_RenderText_Solid(m_font, m_toInstallPlugins[i].c_str(), m_colors.text);
+            SDL_Texture *textTexture = SDL_CreateTextureFromSurface(childRenderer, textSurface);
+
+            SDL_Rect textRect{};
+            textRect.x = m_marginW;
+            textRect.y = i * m_installPluginsPageH / pluginsCount + m_marginH;
+            textRect.w = m_installPluginsPageW - m_marginW;
+            textRect.h = textSurface->h;
+
+            SDL_RenderFillRect(childRenderer, &textRect);
+
+            textRect.x = m_marginW;
+            textRect.w = textSurface->w;
+            SDL_RenderCopy(childRenderer, textTexture, NULL, &textRect);
+
+            SDL_FreeSurface(textSurface);
+            SDL_DestroyTexture(textTexture);
+
+            SDL_SetRenderDrawColor(childRenderer, m_colors.background.r, m_colors.background.g, m_colors.background.b, m_colors.background.a);
+        }
+
+        SDL_RenderPresent(childRenderer);
+
+        while (SDL_PollEvent(&event))
+        {
+            if (event.type == SDL_KEYDOWN)
+            {
+                switch (event.key.keysym.sym)
+                {
+                case SDLK_UP:
+                    if (selectedButtonIndex > 0)
+                    {
+                        selectedButtonIndex--;
+                    }
+                    break;
+
+                case SDLK_DOWN:
+                    if (selectedButtonIndex < pluginsIndexes)
+                    {
+                        selectedButtonIndex++;
+                    }
+                    break;
+                
+                case SDLK_RETURN:
+                case SDLK_RETURN2:
+                    loadPlugin(selectedButtonIndex);
+                    break;
+
+                case SDLK_LEFT:
+                    quit = true;
+                }
+            }
         }
     }
 
@@ -408,6 +464,11 @@ Rhytmia::AppCode Rhytmia::installPluginsButtonAction(SDL_Event &event, int *sele
     SDL_DestroyWindow(childWindow);
 
     return AppCode::success;
+}
+
+void Rhytmia::loadPlugin(const size_t &index)
+{
+
 }
 
 void Rhytmia::renderWindow(int buttonCount, int selectedButtonIndex, int windowWidth, int windowHeight)
@@ -529,8 +590,6 @@ Rhytmia::AppCode Rhytmia::initButtons()
     if (m_toInstallPlugins.size() > 0)
     {
         m_menuButtons.push_back("install plugins");
-
-       
     }
 
     for (const std::string &entry : m_installedPlugins)

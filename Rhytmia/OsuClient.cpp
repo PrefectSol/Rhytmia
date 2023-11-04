@@ -68,6 +68,11 @@ OsuClient::ResultCode OsuClient::getStatus()
     return m_status;
 }
 
+bool OsuClient::isClosed()
+{
+    return initPid() != ResultCode::success;
+}
+
 OsuClient::ResultCode OsuClient::initPid()
 {
     const HANDLE hProcessSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);

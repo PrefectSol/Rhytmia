@@ -37,13 +37,11 @@ WebWrapper::ResultCode WebWrapper::initialize()
 
 WebWrapper::ResultCode WebWrapper::getResponse(std::string url, std::string *response)
 {
-    CURLcode res;
-
     curl_easy_setopt(m_curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(m_curl, CURLOPT_WRITEFUNCTION, WriteCallback);
     curl_easy_setopt(m_curl, CURLOPT_WRITEDATA, response);
 
-    res = curl_easy_perform(m_curl);
+    const CURLcode res = curl_easy_perform(m_curl);
 
     if (res != CURLE_OK) 
     {
